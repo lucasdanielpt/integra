@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import {
+  createAdminSessionToken,
+  clearAdminSession,
+  isValidAdminSession,
+} from '@/lib/admin-session'
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'integra2024'
 const SESSION_TOKEN = 'admin_session'
@@ -10,13 +15,15 @@ export async function POST(request: Request) {
 
     if (action === 'logout') {
       const cookieStore = await cookies()
+      const token = cookieStore.get(SESSION_TOKEN)?.value
+      clearAdminSession(token)
       cookieStore.delete(SESSION_TOKEN)
       return NextResponse.json({ success: true })
     }
 
     if (password === ADMIN_PASSWORD) {
       const cookieStore = await cookies()
-      const token = Buffer.from(`${Date.now()}-${Math.random()}`).toString('base64')
+      const token = createAdminSessionToken()
       
       cookieStore.set(SESSION_TOKEN, token, {
         httpOnly: true,
@@ -42,9 +49,9 @@ export async function POST(request: Request) {
 
 export async function GET() {
   const cookieStore = await cookies()
-  const session = cookieStore.get(SESSION_TOKEN)
+  const session = cookieStore.get(SESSION_TOKEN)?.value
 
   return NextResponse.json({
-    authenticated: !!session?.value,
+    authenticated: isValidAdminSession(session),
   })
 }

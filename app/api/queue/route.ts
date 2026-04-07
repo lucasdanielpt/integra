@@ -1,15 +1,31 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   getQueueState,
   generateTicket,
   callNextTicket,
   resetQueue,
+  getTicketById,
 } from "@/lib/queue-store";
+import { isValidAdminSession } from "@/lib/admin-session";
+
+const SESSION_TOKEN = "admin_session";
+
+async function isAdminAuthenticated(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(SESSION_TOKEN)?.value;
+  return isValidAdminSession(sessionToken);
+}
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const state = getQueueState();
+  const isAdmin = await isAdminAuthenticated();
+  if (!isAdmin) {
+    const { tickets, currentTicketInfo, ...publicState } = state;
+    return NextResponse.json(publicState);
+  }
   return NextResponse.json(state);
 }
 
@@ -18,11 +34,19 @@ export async function POST(request: Request) {
 
   switch (action) {
     case "generate":
-      const new_ticket = generateTicket({ name, email, tel });
+      const ticket = generateTicket({ name, email, tel });
       const queueState = getQueueState();
-      return NextResponse.json({ new_ticket, ...queueState });
+      return NextResponse.json({
+        ticket,
+        currentTicket: queueState.currentTicket,
+        lastTicket: queueState.lastTicket,
+        calledAt: queueState.calledAt,
+      });
 
     case "call":
+      if (!(await isAdminAuthenticated())) {
+        return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+      }
       const called = callNextTicket();
       if (called === null) {
         return NextResponse.json(
@@ -30,9 +54,13 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      return NextResponse.json({ called, ...getQueueState() });
+      const ticket_info = getTicketById(called);
+      return NextResponse.json({ called, ticket_info, ...getQueueState() });
 
     case "reset":
+      if (!(await isAdminAuthenticated())) {
+        return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+      }
       resetQueue();
       return NextResponse.json({ message: "Fila zerada", ...getQueueState() });
 

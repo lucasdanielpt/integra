@@ -108,7 +108,7 @@ export default function ClientePage() {
     return () => clearInterval(interval);
   }, [ticket, fetchQueueState]);
 
-  const handleGenerateTicket = async (e: React.SubmitEvent) => {
+  const handleGenerateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
@@ -124,8 +124,7 @@ export default function ClientePage() {
       const data = await response.json();
 
       if (response.ok) {
-        setTicket(data.ticket.id);
-        console.log(data.ticket.id);
+        setTicket(data.ticket);
         // Save to localStorage
         localStorage.setItem(
           STORAGE_KEY,
@@ -190,7 +189,7 @@ export default function ClientePage() {
                 <h1 className="text-2xl font-semibold text-foreground mb-2">
                   Bem-vindo
                 </h1>
-                <form>
+                <form onSubmit={handleGenerateTicket}>
                   <FieldGroup>
                     <FieldSet>
                       <FieldLegend>Dados</FieldLegend>
@@ -246,7 +245,7 @@ export default function ClientePage() {
                   )}
 
                   <Button
-                    onSubmit={(e) => handleGenerateTicket}
+                    type="submit"
                     disabled={isLoading}
                     size="lg"
                     className="w-full h-16 text-lg font-semibold m-2"

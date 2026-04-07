@@ -1,12 +1,18 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useCallback } from 'react'
-import Image from 'next/image'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Field, FieldLabel } from '@/components/ui/field'
+import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,45 +23,58 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { PhoneCall, RotateCcw, Home, Monitor, Users, Lock, LogOut } from 'lucide-react'
-import { Spinner } from '@/components/ui/spinner'
+} from "@/components/ui/alert-dialog";
+import {
+  PhoneCall,
+  RotateCcw,
+  Home,
+  Monitor,
+  Users,
+  Lock,
+  LogOut,
+} from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 
 interface QueueState {
-  currentTicket: number
-  lastTicket: number
+  currentTicket: number;
+  lastTicket: number;
+  currentTicketInfo?: {
+    name: string;
+    email: string | null;
+    tel: string;
+  } | null;
 }
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError(null)
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
 
     try {
-      const response = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (data.success) {
-        onLogin()
+        onLogin();
       } else {
-        setError(data.error || 'Senha incorreta')
+        setError(data.error || "Senha incorreta");
       }
     } catch {
-      setError('Erro de conexão')
+      setError("Erro de conexão");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-background">
@@ -99,19 +118,27 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
               </div>
             )}
 
-            <Button type="submit" disabled={isLoading || !password} className="h-12">
+            <Button
+              type="submit"
+              disabled={isLoading || !password}
+              className="h-12"
+            >
               {isLoading ? (
                 <>
                   <Spinner className="mr-2" />
                   Verificando...
                 </>
               ) : (
-                'Entrar'
+                "Entrar"
               )}
             </Button>
 
             <Link href="/" className="text-center">
-              <Button variant="ghost" type="button" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                type="button"
+                className="text-muted-foreground"
+              >
                 <Home className="mr-2 h-4 w-4" />
                 Voltar para Início
               </Button>
@@ -120,97 +147,108 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         </CardContent>
       </Card>
     </main>
-  )
+  );
 }
 
 function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [queue, setQueue] = useState<QueueState>({
     currentTicket: 0,
     lastTicket: 0,
-  })
-  const [isLoading, setIsLoading] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const fetchQueue = useCallback(async () => {
     try {
-      const response = await fetch('/api/queue')
-      const data = await response.json()
-      setQueue(data)
+      const response = await fetch("/api/queue");
+      if (response.status === 401) {
+        onLogout();
+        return;
+      }
+      const data = await response.json();
+      setQueue(data);
     } catch {
-      console.error('Erro ao buscar fila')
+      console.error("Erro ao buscar fila");
     }
-  }, [])
+  }, [onLogout]);
 
   useEffect(() => {
-    fetchQueue()
-    const interval = setInterval(fetchQueue, 3000)
-    return () => clearInterval(interval)
-  }, [fetchQueue])
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 3000);
+    return () => clearInterval(interval);
+  }, [fetchQueue]);
 
   const callNext = async () => {
-    setIsLoading(true)
-    setMessage(null)
+    setIsLoading(true);
+    setMessage(null);
 
     try {
-      const response = await fetch('/api/queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'call' }),
-      })
+      const response = await fetch("/api/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "call" }),
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (response.ok) {
-        setQueue(data)
-        setMessage(`Senha ${String(data.called).padStart(3, '0')} chamada!`)
+        setQueue(data);
+        const ticket = data.ticket_info;
+        setMessage(
+          `Senha ${String(data.called).padStart(3, "0")} chamada!}`,
+        );
+      } else if (response.status === 401) {
+        onLogout();
       } else {
-        setMessage(data.error)
+        setMessage(data.error);
       }
     } catch {
-      setMessage('Erro de conexão')
+      setMessage("Erro de conexão");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const resetQueue = async () => {
-    setIsLoading(true)
-    setMessage(null)
+    setIsLoading(true);
+    setMessage(null);
 
     try {
-      const response = await fetch('/api/queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset' }),
-      })
+      const response = await fetch("/api/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (response.ok) {
-        setQueue(data)
-        setMessage('Fila zerada com sucesso!')
+        setQueue(data);
+        setMessage("Fila zerada com sucesso!");
+      } else if (response.status === 401) {
+        onLogout();
       }
     } catch {
-      setMessage('Erro de conexão')
+      setMessage("Erro de conexão");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'logout' }),
-      })
-      onLogout()
+      await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+      onLogout();
     } catch {
-      console.error('Erro ao sair')
+      console.error("Erro ao sair");
     }
-  }
+  };
 
-  const waitingCount = queue.lastTicket - queue.currentTicket
+  const waitingCount = queue.lastTicket - queue.currentTicket;
 
   return (
     <main className="min-h-screen flex flex-col items-center p-6 bg-background">
@@ -245,7 +283,12 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 <Monitor className="h-5 w-5" />
               </Button>
             </Link>
-            <Button variant="ghost" size="icon" onClick={handleLogout} title="Sair">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              title="Sair"
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </nav>
@@ -261,8 +304,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <CardContent>
               <div className="text-4xl font-bold text-primary">
                 {queue.currentTicket === 0
-                  ? '---'
-                  : String(queue.currentTicket).padStart(3, '0')}
+                  ? "---"
+                  : String(queue.currentTicket).padStart(3, "0")}
               </div>
             </CardContent>
           </Card>
@@ -276,8 +319,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <CardContent>
               <div className="text-4xl font-bold text-foreground">
                 {queue.lastTicket === 0
-                  ? '---'
-                  : String(queue.lastTicket).padStart(3, '0')}
+                  ? "---"
+                  : String(queue.lastTicket).padStart(3, "0")}
               </div>
             </CardContent>
           </Card>
@@ -298,9 +341,30 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         </div>
 
         {message && (
-          <div className="p-4 rounded-lg bg-muted text-center text-foreground">
+          <div className="p-4 rounded-lg bg-muted text-center text-foreground whitespace-pre-line">
             {message}
           </div>
+        )}
+
+        {queue.currentTicketInfo && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Dados da Senha Atual
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              <p>
+                <strong>Nome:</strong> {queue.currentTicketInfo.name}
+              </p>
+              <p>
+                <strong>Email:</strong> {queue.currentTicketInfo.email || "-"}
+              </p>
+              <p>
+                <strong>Telefone:</strong> {queue.currentTicketInfo.tel}
+              </p>
+            </CardContent>
+          </Card>
         )}
 
         <Card>
@@ -350,37 +414,37 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
         </p>
       </div>
     </main>
-  )
+  );
 }
 
 export default function AdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/auth')
-        const data = await response.json()
-        setIsAuthenticated(data.authenticated)
+        const response = await fetch("/api/auth");
+        const data = await response.json();
+        setIsAuthenticated(data.authenticated);
       } catch {
-        setIsAuthenticated(false)
+        setIsAuthenticated(false);
       }
-    }
+    };
 
-    checkAuth()
-  }, [])
+    checkAuth();
+  }, []);
 
   if (isAuthenticated === null) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background">
         <Spinner className="h-8 w-8 text-primary" />
       </main>
-    )
+    );
   }
 
   if (!isAuthenticated) {
-    return <LoginForm onLogin={() => setIsAuthenticated(true)} />
+    return <LoginForm onLogin={() => setIsAuthenticated(true)} />;
   }
 
-  return <AdminDashboard onLogout={() => setIsAuthenticated(false)} />
+  return <AdminDashboard onLogout={() => setIsAuthenticated(false)} />;
 }
