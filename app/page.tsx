@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Ticket } from "lucide-react";
 
 const COOLDOWN_SECONDS = 5;
@@ -13,6 +15,8 @@ export default function ClientePage() {
   const [ticket, setTicket] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [cpf, setCpf] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
   const [resetAt, setResetAt] = useState<number | null>(null);
@@ -36,6 +40,8 @@ export default function ClientePage() {
     const timeout = window.setTimeout(() => {
       setTicket(null);
       setError(null);
+      setName("");
+      setCpf("");
       setCooldownUntil(null);
       setResetAt(null);
       setNow(Date.now());
@@ -43,6 +49,8 @@ export default function ClientePage() {
 
     return () => window.clearTimeout(timeout);
   }, [resetAt]);
+
+  const canSubmit = name.trim().length > 0 && cpf.trim().length > 0;
 
   const handleGenerateTicket = async () => {
     setIsLoading(true);
@@ -52,7 +60,7 @@ export default function ClientePage() {
       const response = await fetch("/api/queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "generate" }),
+        body: JSON.stringify({ action: "generate", name, cpf }),
       });
 
       const data = await response.json();
@@ -110,11 +118,36 @@ export default function ClientePage() {
               </div>
             )}
 
+            <div className="w-full flex flex-col gap-4">
+              <Field>
+                <FieldLabel htmlFor="name">Nome</FieldLabel>
+                <Input
+                  id="name"
+                  placeholder="Digite seu nome"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={isLoading || isCooldownActive}
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="cpf">CPF</FieldLabel>
+                <Input
+                  id="cpf"
+                  placeholder="000.000.000-00"
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  disabled={isLoading || isCooldownActive}
+                  inputMode="numeric"
+                />
+              </Field>
+            </div>
+
             <div className="w-full flex flex-col gap-2">
               <Button
                 type="button"
                 onClick={handleGenerateTicket}
-                disabled={isLoading || isCooldownActive}
+                disabled={isLoading || isCooldownActive || !canSubmit}
                 size="lg"
                 className="w-full h-16 text-lg font-semibold"
               >

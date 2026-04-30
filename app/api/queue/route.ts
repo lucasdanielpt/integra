@@ -14,11 +14,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { action } = await request.json()
+  const { action, name, cpf } = await request.json()
 
   switch (action) {
     case 'generate':
-      const ticket = generateTicket()
+      const ticket = generateTicket({ name, cpf })
       return NextResponse.json({ ticket, ...getQueueState() })
 
     case 'call':
