@@ -24,6 +24,11 @@ import { Spinner } from '@/components/ui/spinner'
 interface QueueState {
   currentTicket: number
   lastTicket: number
+  currentTicketInfo?: {
+    id: number
+    name: string
+    cpf: string
+  } | null
 }
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -162,7 +167,14 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
       if (response.ok) {
         setQueue(data)
-        setMessage(`Senha ${String(data.called).padStart(3, '0')} chamada!`)
+        const info = data.ticket_info as
+          | { id: number; name: string; cpf: string }
+          | undefined
+        setMessage(
+          info
+            ? `Senha ${String(data.called).padStart(3, '0')} chamada! (${info.name} • CPF ${info.cpf})`
+            : `Senha ${String(data.called).padStart(3, '0')} chamada!`
+        )
       } else {
         setMessage(data.error)
       }
@@ -301,6 +313,24 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           <div className="p-4 rounded-lg bg-muted text-center text-foreground">
             {message}
           </div>
+        )}
+
+        {queue.currentTicketInfo && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Paciente da Senha Atual
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1">
+              <div className="text-base font-semibold text-foreground">
+                {queue.currentTicketInfo.name}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                CPF: {queue.currentTicketInfo.cpf}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         <Card>

@@ -10,6 +10,7 @@ interface QueueState {
   lastTicket: number
   calledAt: Date | null
   tickets: QueueTicket[]
+  currentTicketInfo: QueueTicket | null
 }
 
 let queueState: QueueState = {
@@ -17,6 +18,7 @@ let queueState: QueueState = {
   lastTicket: 0,
   calledAt: null,
   tickets: [],
+  currentTicketInfo: null,
 }
 
 export function getQueueState(): QueueState {
@@ -43,10 +45,16 @@ export function generateTicket({
 export function callNextTicket(): number | null {
   if (queueState.currentTicket < queueState.lastTicket) {
     queueState.currentTicket += 1
+    queueState.currentTicketInfo =
+      getTicketById(queueState.currentTicket) ?? null
     queueState.calledAt = new Date()
     return queueState.currentTicket
   }
   return null
+}
+
+export function getTicketById(id: number | null): QueueTicket | undefined {
+  return queueState.tickets.find((t) => t.id === id)
 }
 
 export function resetQueue(): void {
@@ -55,5 +63,6 @@ export function resetQueue(): void {
     lastTicket: 0,
     calledAt: null,
     tickets: [],
+    currentTicketInfo: null,
   }
 }
