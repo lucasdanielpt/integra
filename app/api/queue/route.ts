@@ -4,6 +4,7 @@ import {
   generateTicket,
   callNextTicket,
   resetQueue,
+  getTicketById,
 } from '@/lib/queue-store'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
           { status: 400 }
         )
       }
-      return NextResponse.json({ called, ...getQueueState() })
+      const ticket_info = getTicketById(called)
+      return NextResponse.json({ called, ticket_info, ...getQueueState() })
 
     case 'reset':
       resetQueue()
