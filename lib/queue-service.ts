@@ -35,7 +35,10 @@ export type QueueStateJson = {
   tickets: PublicTicketInfo[]
   currentTicketInfo: PublicTicketInfo | null
   waitingBoard: QueueBoardRow[]
+  /** Primeiro WAITING na ordem (redundante com nextWaitingTickets[0]) para compatível com consumidores antigos */
   nextTicketInfo: PublicTicketInfo | null
+  /** Até os 3 primeiros WAITING (ordem por senha) para pré-visualização no painel */
+  nextWaitingTickets: PublicTicketInfo[]
 }
 
 function sessionToTicketInfo(
@@ -129,12 +132,13 @@ export async function getQueueState(): Promise<QueueStateJson> {
       calledGuiche: s.calledGuiche ?? null,
     }))
 
-  const nextWaiting = sessions
+  const nextWaitingSorted = sessions
     .filter((s) => s.status === QueueTicketStatus.WAITING)
-    .sort((a, b) => a.ticketNumber - b.ticketNumber)[0]
-  const nextTicketInfo = nextWaiting
-    ? sessionToTicketInfo(nextWaiting)
-    : null
+    .sort((a, b) => a.ticketNumber - b.ticketNumber)
+  const nextWaitingTickets = nextWaitingSorted
+    .slice(0, 3)
+    .map(sessionToTicketInfo)
+  const nextTicketInfo = nextWaitingTickets[0] ?? null
 
   return {
     currentTicket,
@@ -144,6 +148,7 @@ export async function getQueueState(): Promise<QueueStateJson> {
     currentTicketInfo,
     waitingBoard,
     nextTicketInfo,
+    nextWaitingTickets,
   }
 }
 

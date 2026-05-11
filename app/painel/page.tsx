@@ -13,7 +13,8 @@ interface QueueState {
   currentTicket: number
   lastTicket: number
   currentTicketInfo?: TicketBrief | null
-  nextTicketInfo?: TicketBrief | null
+  /** Até 3 próximos WAITING (senha + nome) */
+  nextWaitingTickets?: TicketBrief[]
 }
 
 export default function PainelPage() {
@@ -81,7 +82,8 @@ export default function PainelPage() {
   }, [fetchQueue])
 
   const current = queue.currentTicketInfo
-  const next = queue.nextTicketInfo
+  /** Sempre exibimos três vagas visuais; faltantes mostram "---". */
+  const upcomingSlots = queue.nextWaitingTickets ?? []
 
   const currentGuicheLabel =
     typeof current?.calledGuiche === 'number' ? current.calledGuiche : null
@@ -137,16 +139,39 @@ export default function PainelPage() {
 
         <div className="w-full max-w-xl h-px bg-border" />
 
-        <div className="text-center max-w-3xl px-4">
-          <p className="text-xl text-muted-foreground mb-2 uppercase tracking-widest">
-            Próxima senha
+        <div className="w-full max-w-4xl px-4">
+          <p className="text-xl text-muted-foreground mb-8 text-center uppercase tracking-widest">
+            Próximas senhas na fila
           </p>
-          <div className="text-6xl font-semibold text-muted-foreground">
-            {next ? String(next.id).padStart(3, '0') : '---'}
-          </div>
-          {next?.name ? (
-            <p className="mt-4 text-2xl md:text-3xl font-medium text-foreground">{next.name}</p>
-          ) : null}
+          <ol className="flex flex-col gap-8 list-none p-0 m-0">
+            {[0, 1, 2].map((index) => {
+              const item = upcomingSlots[index]
+              return (
+                <li
+                  key={index}
+                  className="flex flex-col sm:flex-row sm:items-baseline sm:justify-center gap-2 sm:gap-10 text-center sm:text-left border-b border-border/60 pb-8 last:border-0 last:pb-0"
+                >
+                  <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider shrink-0 sm:w-28 sm:text-right">
+                    {index + 1}ª na fila
+                  </span>
+                  <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-6 min-w-0 flex-1 justify-center sm:justify-start">
+                    {item ? (
+                      <>
+                        <span className="text-5xl md:text-6xl font-semibold text-muted-foreground tabular-nums shrink-0">
+                          {String(item.id).padStart(3, '0')}
+                        </span>
+                        <span className="text-2xl md:text-3xl font-medium text-foreground break-words">
+                          {item.name}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-3xl md:text-4xl text-muted-foreground">—</span>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
         </div>
       </div>
 
