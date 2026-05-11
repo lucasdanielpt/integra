@@ -1,13 +1,20 @@
 import type { Patient, QueueSession } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { QueueTicketStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { brazilTodayDate } from '@/lib/queue-date'
 import { isValidCpfLength, normalizeCpf } from '@/lib/cpf'
+import {
+  formatPhoneDisplay,
+  isValidBrMobileDigits,
+  normalizePhone,
+} from '@/lib/phone'
 
 export type PublicTicketInfo = {
   id: number
   name: string
   cpf: string
+  phone: string | null
 }
 
 export type QueueStateJson = {
@@ -22,16 +29,27 @@ function sessionToTicketInfo(
   session: QueueSession & { patient: Patient }
 ): PublicTicketInfo {
   const cpfDigits = session.patient.cpfNormalized
+  const phoneDigits = session.patient.phoneNormalized
   return {
     id: session.ticketNumber,
     name: session.patient.fullName,
     cpf: formatCpfDisplay(cpfDigits),
+    phone:
+      phoneDigits && isValidBrMobileDigits(phoneDigits)
+        ? formatPhoneDisplay(phoneDigits)
+        : null,
   }
 }
 
 function formatCpfDisplay(digits: string): string {
   if (digits.length !== 11) return digits
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+}
+
+function patientPhoneDisplay(p: Patient): string | null {
+  const d = p.phoneNormalized
+  if (!d || !isValidBrMobileDigits(d)) return null
+  return formatPhoneDisplay(d)
 }
 
 async function loadStateForDate(queueDate: Date): Promise<{
@@ -93,48 +111,55 @@ function peopleAhead(
   return Math.max(0, userTicket - currentTicket - 1)
 }
 
-export type GenerateResult =
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+  )
+}
+
+export type CheckCpfResult =
+  | { ok: false; error: string; state: QueueStateJson }
   | {
       ok: true
+      phase: 'in_queue'
       ticket: number
-      alreadyInQueue: boolean
       peopleAhead: number
+      patientName: string
+      patientPhone: string | null
       state: QueueStateJson
     }
-  | { ok: false; error: string; state: QueueStateJson }
+  | {
+      ok: true
+      phase: 'can_take_ticket'
+      needsRegistration: boolean
+      patientName: string | null
+      patientPhone: string | null
+      state: QueueStateJson
+    }
 
-export async function generateTicket(input: {
-  name: string
-  cpf: string
-}): Promise<GenerateResult> {
-  const baseState = await getQueueState()
-  const cpf = normalizeCpf(input.cpf)
+/** Consulta CPF: fila ativa ou dados para retirar senha. */
+export async function checkCpfQueueStatus(cpfRaw: string): Promise<CheckCpfResult> {
+  const state = await getQueueState()
+  const cpf = normalizeCpf(cpfRaw)
   if (!isValidCpfLength(cpf)) {
-    return { ok: false, error: 'CPF deve conter 11 dígitos.', state: baseState }
+    return { ok: false, error: 'CPF deve conter 11 dígitos.', state }
   }
 
   const queueDate = brazilTodayDate()
-  const nameTrim = input.name.trim()
-
-  const existingPatient = await prisma.patient.findUnique({
+  const patient = await prisma.patient.findUnique({
     where: { cpfNormalized: cpf },
   })
 
-  if (!existingPatient) {
-    if (!nameTrim) {
-      return {
-        ok: false,
-        error: 'Informe o nome completo para o primeiro cadastro.',
-        state: baseState,
-      }
+  if (!patient) {
+    return {
+      ok: true,
+      phase: 'can_take_ticket',
+      needsRegistration: true,
+      patientName: null,
+      patientPhone: null,
+      state,
     }
   }
-
-  const patient =
-    existingPatient ??
-    (await prisma.patient.create({
-      data: { cpfNormalized: cpf, fullName: nameTrim },
-    }))
 
   const active = await prisma.queueSession.findFirst({
     where: {
@@ -145,46 +170,180 @@ export async function generateTicket(input: {
     include: { patient: true },
   })
 
-  const stateAfter = await getQueueState()
-
   if (active) {
     return {
       ok: true,
+      phase: 'in_queue',
       ticket: active.ticketNumber,
-      alreadyInQueue: true,
       peopleAhead: peopleAhead(
         active.ticketNumber,
-        stateAfter.currentTicket,
+        state.currentTicket,
         active.status
       ),
-      state: stateAfter,
+      patientName: patient.fullName,
+      patientPhone: patientPhoneDisplay(patient),
+      state,
     }
   }
 
-  const ticketNumber = await prisma.$transaction(async (tx) => {
-    const agg = await tx.queueSession.aggregate({
-      where: { queueDate },
-      _max: { ticketNumber: true },
-    })
-    const next = (agg._max.ticketNumber ?? 0) + 1
-    await tx.queueSession.create({
-      data: {
-        ticketNumber: next,
-        patientId: patient.id,
-        queueDate,
-        status: QueueTicketStatus.WAITING,
-      },
-    })
-    return next
-  })
-
-  const state = await getQueueState()
   return {
     ok: true,
-    ticket: ticketNumber,
+    phase: 'can_take_ticket',
+    needsRegistration: false,
+    patientName: patient.fullName,
+    patientPhone: patientPhoneDisplay(patient),
+    state,
+  }
+}
+
+export type GenerateResult =
+  | {
+      ok: true
+      ticket: number
+      alreadyInQueue: boolean
+      peopleAhead: number
+      state: QueueStateJson
+    }
+  | { ok: false; error: string; state: QueueStateJson }
+
+type TxInner =
+  | { kind: 'need_profile' }
+  | { kind: 'existing'; active: QueueSession & { patient: Patient } }
+  | { kind: 'new'; ticketNumber: number }
+
+export async function generateTicket(input: {
+  name: string
+  cpf: string
+  phone: string
+}): Promise<GenerateResult> {
+  const baseState = await getQueueState()
+  const cpf = normalizeCpf(input.cpf)
+  if (!isValidCpfLength(cpf)) {
+    return { ok: false, error: 'CPF deve conter 11 dígitos.', state: baseState }
+  }
+
+  const queueDate = brazilTodayDate()
+  const nameTrim = input.name.trim()
+  const phoneDigits = normalizePhone(input.phone)
+
+  let inner: TxInner
+  try {
+    inner = await prisma.$transaction(async (tx) => {
+      let patient = await tx.patient.findUnique({
+        where: { cpfNormalized: cpf },
+      })
+
+      if (!patient) {
+        if (!nameTrim || !isValidBrMobileDigits(phoneDigits)) {
+          return { kind: 'need_profile' as const }
+        }
+        try {
+          patient = await tx.patient.create({
+            data: {
+              cpfNormalized: cpf,
+              fullName: nameTrim,
+              phoneNormalized: phoneDigits,
+            },
+          })
+        } catch (e) {
+          if (isUniqueViolation(e)) {
+            patient = await tx.patient.findUniqueOrThrow({
+              where: { cpfNormalized: cpf },
+            })
+          } else {
+            throw e
+          }
+        }
+      }
+
+      const active = await tx.queueSession.findFirst({
+        where: {
+          patientId: patient.id,
+          queueDate,
+          status: { in: [QueueTicketStatus.WAITING, QueueTicketStatus.CALLED] },
+        },
+        include: { patient: true },
+      })
+
+      if (active) {
+        return { kind: 'existing', active }
+      }
+
+      const agg = await tx.queueSession.aggregate({
+        where: { queueDate },
+        _max: { ticketNumber: true },
+      })
+      const next = (agg._max.ticketNumber ?? 0) + 1
+
+      try {
+        await tx.queueSession.create({
+          data: {
+            ticketNumber: next,
+            patientId: patient.id,
+            queueDate,
+            status: QueueTicketStatus.WAITING,
+          },
+        })
+        return { kind: 'new', ticketNumber: next }
+      } catch (e) {
+        if (isUniqueViolation(e)) {
+          const active2 = await tx.queueSession.findFirst({
+            where: {
+              patientId: patient.id,
+              queueDate,
+              status: {
+                in: [QueueTicketStatus.WAITING, QueueTicketStatus.CALLED],
+              },
+            },
+            include: { patient: true },
+          })
+          if (active2) {
+            return { kind: 'existing', active: active2 }
+          }
+        }
+        throw e
+      }
+    })
+  } catch {
+    const state = await getQueueState()
+    return {
+      ok: false,
+      error: 'Não foi possível emitir a senha. Tente novamente.',
+      state,
+    }
+  }
+
+  const state = await getQueueState()
+
+  if (inner.kind === 'need_profile') {
+    return {
+      ok: false,
+      error:
+        'Informe nome completo e celular (DDD + número) com 10 ou 11 dígitos.',
+      state,
+    }
+  }
+
+  if (inner.kind === 'existing') {
+    return {
+      ok: true,
+      ticket: inner.active.ticketNumber,
+      alreadyInQueue: true,
+      peopleAhead: peopleAhead(
+        inner.active.ticketNumber,
+        state.currentTicket,
+        inner.active.status
+      ),
+      state,
+    }
+  }
+
+  return {
+    ok: true,
+    ticket: inner.ticketNumber,
     alreadyInQueue: false,
     peopleAhead: peopleAhead(
-      ticketNumber,
+      inner.ticketNumber,
       state.currentTicket,
       QueueTicketStatus.WAITING
     ),

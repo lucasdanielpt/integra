@@ -4,6 +4,7 @@ import {
   generateTicket,
   callNextTicket,
   resetQueue,
+  checkCpfQueueStatus,
 } from '@/lib/queue-service'
 
 export const dynamic = 'force-dynamic'
@@ -14,13 +15,27 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { action, name, cpf } = await request.json()
+  const { action, name, cpf, phone } = await request.json()
 
   switch (action) {
+    case 'check': {
+      const result = await checkCpfQueueStatus(
+        typeof cpf === 'string' ? cpf : ''
+      )
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error, ...result.state },
+          { status: 400 }
+        )
+      }
+      return NextResponse.json(result)
+    }
+
     case 'generate': {
       const result = await generateTicket({
         name: typeof name === 'string' ? name : '',
         cpf: typeof cpf === 'string' ? cpf : '',
+        phone: typeof phone === 'string' ? phone : '',
       })
       if (!result.ok) {
         return NextResponse.json(
