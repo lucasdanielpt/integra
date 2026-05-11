@@ -22,10 +22,12 @@
 
 ### Incluir
 
-- [ ] **Tablet/kiosk** (`/totem` ou parecido): UI grande, sem links de admin; confirma → mostra número ~5 s → volta ao início (CPF primeiro, nome só se primeiro acesso ou correção opcional documentada).
-- [ ] **Celular (QR para `/`):** fluxo explícito CPF primeiro; lookup pré-preenche nome; foco em acompanhar quando já há ticket (polling leve ao estado da fila do dia).
-- [ ] **Validações e mensagens claras:** CPF (formato/checksum se quiser), erros amigáveis, loading.
-- [ ] **Revisão rápida LGPD/log:** não logar CPF completo onde não precisar; política simples de retenção (mesmo que “apenas documentado” no MVP).
-- [ ] **Smoke test:** tablet em fullscreen; QR apontando para URL estável HTTPS.
+- [x] **Tablet/kiosk** (`/totem` ou parecido): UI grande, sem links de admin; confirma → mostra número ~5 s → volta ao início (CPF primeiro, nome só se primeiro acesso ou correção opcional documentada).
+- [x] **Celular (QR para `/`):** fluxo explícito CPF primeiro; lookup pré-preenche nome; foco em acompanhar quando já há ticket (polling leve ao estado da fila do dia).
+- [x] **Validações e mensagens claras:** CPF (formato/checksum se quiser), erros amigáveis, loading.
+- [x] **Revisão rápida LGPD/log:** não logar CPF completo onde não precisar; política simples de retenção (mesmo que “apenas documentado” no MVP).
+- [x] **Smoke test:** tablet em fullscreen; QR apontando para URL estável HTTPS.
 
-**Critério de pronto:** duas superfícies (totem vs celular) com comportamentos distintos e regra “CPF já na fila = progresso, não nova senha” consistente nos dois.
+**Critério de pronto:** duas superfícies (totem vs celular) com comportamentos distintos e regra “CPF já na fila = progresso, não nova senha” consistente nos dois. **Smoke:** seguir checklist em [`docs/smoke-test-fila-mvp.md`](docs/smoke-test-fila-mvp.md); verificação HTTP opcional com `pnpm run smoke:urls` e `SMOKE_BASE_URL`.
+
+**Status da Fase 2:** todos os entregáveis listados foram implementados/documentados no repositório; a checklist de smoke física permanece obrigação de execução da operação antes de produção efetiva.

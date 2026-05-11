@@ -18,3 +18,9 @@ Configure a variável de ambiente **`DATABASE_URL`** nos ambientes **Production*
 **Não use** `localhost` ou `127.0.0.1` na Vercel: o build roda nos servidores da plataforma; a URL precisa ser a do Postgres **na nuvem** (Neon, Supabase, etc.), igual à que você usaria no notebook apontando para produção. Se o log mostrar `localhost:5435`, a `DATABASE_URL` no painel da Vercel ainda está errada ou ausente (o deploy não lê o `.env` do seu PC).
 
 O aviso **Ignored build scripts** do pnpm some se o `package.json` listar `pnpm.onlyBuiltDependencies` (já incluído neste repositório para Prisma e Sharp) ou após `pnpm approve-builds` localmente e commit do lockfile resultante.
+
+## Smoke test (Fase 2)
+
+Checklist manual (tablet fullscreen, QR em HTTPS estável): [docs/smoke-test-fila-mvp.md](docs/smoke-test-fila-mvp.md). Opcional contra produção já publicada:
+
+`SMOKE_BASE_URL=https://seu-app.vercel.app pnpm run smoke:urls`.

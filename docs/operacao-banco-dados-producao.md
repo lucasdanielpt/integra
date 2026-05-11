@@ -98,6 +98,8 @@ A lógica da fila usa o **dia civil em `America/Sao_Paulo`** para `queue_date` (
 
 ## 8. Referências no repositório
 
+- LGPD — dados tratados, orientação sobre logs e retenção: `docs/lgpd-dados-logs-retencao.md`
+- Smoke test checklist (HTTPS, totem fullscreen, QR): `docs/smoke-test-fila-mvp.md`
 - Exemplo de URL local: `.env.example`
 - Schema e migrations: `prisma/`
 - Serviço da fila: `lib/queue-service.ts`
