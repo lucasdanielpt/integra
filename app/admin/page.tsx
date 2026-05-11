@@ -28,6 +28,7 @@ interface QueueState {
     id: number
     name: string
     cpf: string
+    phone?: string | null
   } | null
 }
 
@@ -168,11 +169,16 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       if (response.ok) {
         setQueue(data)
         const info = data.ticket_info as
-          | { id: number; name: string; cpf: string }
+          | {
+              id: number
+              name: string
+              cpf: string
+              phone?: string | null
+            }
           | undefined
         setMessage(
           info
-            ? `Senha ${String(data.called).padStart(3, '0')} chamada! (${info.name} • CPF ${info.cpf})`
+            ? `Senha ${String(data.called).padStart(3, '0')} chamada! (${info.name} • CPF ${info.cpf}${info.phone ? ` • ${info.phone}` : ''})`
             : `Senha ${String(data.called).padStart(3, '0')} chamada!`
         )
       } else {
@@ -329,6 +335,11 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               <div className="text-sm text-muted-foreground">
                 CPF: {queue.currentTicketInfo.cpf}
               </div>
+              {queue.currentTicketInfo.phone ? (
+                <div className="text-sm text-muted-foreground">
+                  Celular: {queue.currentTicketInfo.phone}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         )}
