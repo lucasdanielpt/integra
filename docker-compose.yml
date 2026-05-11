@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: fila
+      POSTGRES_PASSWORD: fila
+      POSTGRES_DB: fila
+    volumes:
+      - fila_pg_data:/var/lib/postgresql/data
+
+volumes:
+  fila_pg_data:
