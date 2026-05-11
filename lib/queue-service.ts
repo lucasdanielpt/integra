@@ -15,6 +15,17 @@ export type PublicTicketInfo = {
   name: string
   cpf: string
   phone: string | null
+  /** 1–4 após chamada no guichê; null enquanto aguarda */
+  calledGuiche: number | null
+}
+
+export type QueueBoardRow = {
+  ticketNumber: number
+  status: 'WAITING' | 'CALLED'
+  patientName: string
+  cpf: string
+  phone: string | null
+  calledGuiche: number | null
 }
 
 export type QueueStateJson = {
@@ -23,6 +34,8 @@ export type QueueStateJson = {
   calledAt: string | null
   tickets: PublicTicketInfo[]
   currentTicketInfo: PublicTicketInfo | null
+  waitingBoard: QueueBoardRow[]
+  nextTicketInfo: PublicTicketInfo | null
 }
 
 function sessionToTicketInfo(
@@ -38,6 +51,7 @@ function sessionToTicketInfo(
       phoneDigits && isValidBrMobileDigits(phoneDigits)
         ? formatPhoneDisplay(phoneDigits)
         : null,
+    calledGuiche: session.calledGuiche ?? null,
   }
 }
 
@@ -92,12 +106,44 @@ export async function getQueueState(): Promise<QueueStateJson> {
     .filter((s) => s.status !== QueueTicketStatus.CANCELLED)
     .map(sessionToTicketInfo)
 
+  const waitingBoard: QueueBoardRow[] = sessions
+    .filter(
+      (s) =>
+        s.status === QueueTicketStatus.WAITING ||
+        s.status === QueueTicketStatus.CALLED
+    )
+    .sort((a, b) => a.ticketNumber - b.ticketNumber)
+    .map((s) => ({
+      ticketNumber: s.ticketNumber,
+      status:
+        s.status === QueueTicketStatus.WAITING
+          ? ('WAITING' as const)
+          : ('CALLED' as const),
+      patientName: s.patient.fullName,
+      cpf: formatCpfDisplay(s.patient.cpfNormalized),
+      phone:
+        s.patient.phoneNormalized &&
+        isValidBrMobileDigits(s.patient.phoneNormalized)
+          ? formatPhoneDisplay(s.patient.phoneNormalized)
+          : null,
+      calledGuiche: s.calledGuiche ?? null,
+    }))
+
+  const nextWaiting = sessions
+    .filter((s) => s.status === QueueTicketStatus.WAITING)
+    .sort((a, b) => a.ticketNumber - b.ticketNumber)[0]
+  const nextTicketInfo = nextWaiting
+    ? sessionToTicketInfo(nextWaiting)
+    : null
+
   return {
     currentTicket,
     lastTicket,
     calledAt: calledAt?.toISOString() ?? null,
     tickets,
     currentTicketInfo,
+    waitingBoard,
+    nextTicketInfo,
   }
 }
 
@@ -354,10 +400,25 @@ export async function generateTicket(input: {
   }
 }
 
-export async function callNextTicket(): Promise<
+export async function callNextTicket(
+  guicheNumber: number
+): Promise<
   | { ok: true; called: number; ticket_info: PublicTicketInfo; state: QueueStateJson }
   | { ok: false; error: string; state: QueueStateJson }
 > {
+  if (
+    !Number.isInteger(guicheNumber) ||
+    guicheNumber < 1 ||
+    guicheNumber > 4
+  ) {
+    const state = await getQueueState()
+    return {
+      ok: false,
+      error: 'Guichê inválido.',
+      state,
+    }
+  }
+
   const queueDate = brazilTodayDate()
 
   try {
@@ -387,6 +448,7 @@ export async function callNextTicket(): Promise<
         data: {
           status: QueueTicketStatus.CALLED,
           calledAt: new Date(),
+          calledGuiche: guicheNumber,
         },
         include: { patient: true },
       })

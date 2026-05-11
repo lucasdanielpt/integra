@@ -6,6 +6,7 @@ import {
   resetQueue,
   checkCpfQueueStatus,
 } from '@/lib/queue-service'
+import { readAdminLogin } from '@/lib/server-admin-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,7 +73,17 @@ export async function POST(request: Request) {
       }
 
       case 'call': {
-        const result = await callNextTicket()
+        const login = await readAdminLogin()
+        if (!login || login.kind !== 'guiche') {
+          return NextResponse.json(
+            {
+              error:
+                'Apenas operadores de guichê podem chamar senhas. Entre com a senha do seu guichê.',
+            },
+            { status: 403 }
+          )
+        }
+        const result = await callNextTicket(login.guicheNum)
         if (!result.ok) {
           return NextResponse.json(
             { error: result.error, ...result.state },
@@ -87,6 +98,13 @@ export async function POST(request: Request) {
       }
 
       case 'reset': {
+        const login = await readAdminLogin()
+        if (!login || login.kind !== 'master') {
+          return NextResponse.json(
+            { error: 'Apenas a coordenação pode zerar a fila.' },
+            { status: 403 }
+          )
+        }
         const state = await resetQueue()
         return NextResponse.json({ message: 'Fila zerada', ...state })
       }

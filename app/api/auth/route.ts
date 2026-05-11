@@ -1,35 +1,92 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'integra2024'
-const SESSION_TOKEN = 'admin_session'
+import {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_ROLE_COOKIE,
+  clearAdminCookies,
+  writeAdminCookies,
+} from '@/lib/server-admin-auth'
+import {
+  verifyGuicheCredentials,
+  verifyMasterCredentialsOrBootstrap,
+} from '@/lib/staff-accounts'
 
 export async function POST(request: Request) {
   try {
-    const { password, action } = await request.json()
+    const body = (await request.json()) as Record<string, unknown>
+    const action = body.action as string | undefined
 
     if (action === 'logout') {
-      const cookieStore = await cookies()
-      cookieStore.delete(SESSION_TOKEN)
+      await clearAdminCookies()
       return NextResponse.json({ success: true })
     }
 
-    if (password === ADMIN_PASSWORD) {
-      const cookieStore = await cookies()
-      const token = Buffer.from(`${Date.now()}-${Math.random()}`).toString('base64')
-      
-      cookieStore.set(SESSION_TOKEN, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 8, // 8 horas
-      })
+    const password = typeof body.password === 'string' ? body.password : ''
+    const mode = body.mode === 'master' ? 'master' : 'guiche'
+    const requestedGuiche =
+      typeof body.guiche === 'number'
+        ? body.guiche
+        : typeof body.guiche === 'string'
+          ? parseInt(body.guiche, 10)
+          : undefined
 
-      return NextResponse.json({ success: true })
+    if (!password) {
+      return NextResponse.json(
+        { success: false, error: 'Informe a senha' },
+        { status: 400 }
+      )
+    }
+
+    if (mode === 'master') {
+      const { ok } = await verifyMasterCredentialsOrBootstrap(password)
+      if (ok) {
+        await writeAdminCookies({ kind: 'master' })
+        return NextResponse.json({
+          success: true,
+          role: 'master' as const,
+          guiche: null,
+        })
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Senha incorreta. No primeiro deploy, defina ADMIN_MASTER_PASSWORD (ou ADMIN_PASSWORD) na hospedagem, faça login com essa senha e depois troque-a em “Contas da recepção”.',
+        },
+        { status: 401 }
+      )
+    }
+
+    const gn =
+      typeof requestedGuiche === 'number' &&
+      requestedGuiche >= 1 &&
+      requestedGuiche <= 4
+        ? requestedGuiche
+        : undefined
+    if (gn === undefined) {
+      return NextResponse.json(
+        { success: false, error: 'Selecione o guichê (1–4)' },
+        { status: 400 }
+      )
+    }
+
+    const match = await verifyGuicheCredentials(gn, password)
+    if (match) {
+      await writeAdminCookies({ kind: 'guiche', guicheNum: gn })
+      return NextResponse.json({
+        success: true,
+        role: 'guiche' as const,
+        guiche: gn,
+      })
     }
 
     return NextResponse.json(
-      { success: false, error: 'Senha incorreta' },
+      {
+        success: false,
+        error:
+          'Senha incorreta ou guichê ainda sem conta. A coordenação pode cadastrar a senha na área “Contas da recepção”.',
+      },
       { status: 401 }
     )
   } catch {
@@ -41,10 +98,39 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const session = cookieStore.get(SESSION_TOKEN)
+  const store = await cookies()
+  const hasSession = !!store.get(ADMIN_SESSION_COOKIE)?.value
+  const roleRaw = store.get(ADMIN_ROLE_COOKIE)?.value
 
+  if (!hasSession || !roleRaw) {
+    return NextResponse.json({
+      authenticated: false,
+      role: null as string | null,
+      guiche: null as number | null,
+    })
+  }
+
+  if (roleRaw === 'master') {
+    return NextResponse.json({
+      authenticated: true,
+      role: 'master' as const,
+      guiche: null as null,
+    })
+  }
+
+  const n = parseInt(roleRaw, 10)
+  if (Number.isInteger(n) && n >= 1 && n <= 4) {
+    return NextResponse.json({
+      authenticated: true,
+      role: 'guiche' as const,
+      guiche: n,
+    })
+  }
+
+  await clearAdminCookies()
   return NextResponse.json({
-    authenticated: !!session?.value,
+    authenticated: false,
+    role: null as string | null,
+    guiche: null as number | null,
   })
 }
