@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { QueueTicketStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { brazilTodayDate } from '@/lib/queue-date'
-import { isValidCpfLength, normalizeCpf } from '@/lib/cpf'
+import { normalizeCpf, rejectionMessageForCpfInput } from '@/lib/cpf'
 import {
   formatPhoneDisplay,
   isValidBrMobileDigits,
@@ -140,10 +140,11 @@ export type CheckCpfResult =
 /** Consulta CPF: fila ativa ou dados para retirar senha. */
 export async function checkCpfQueueStatus(cpfRaw: string): Promise<CheckCpfResult> {
   const state = await getQueueState()
-  const cpf = normalizeCpf(cpfRaw)
-  if (!isValidCpfLength(cpf)) {
-    return { ok: false, error: 'CPF deve conter 11 dígitos.', state }
+  const cpfErr = rejectionMessageForCpfInput(cpfRaw)
+  if (cpfErr) {
+    return { ok: false, error: cpfErr, state }
   }
+  const cpf = normalizeCpf(cpfRaw)
 
   const queueDate = brazilTodayDate()
   const patient = await prisma.patient.findUnique({
@@ -217,10 +218,11 @@ export async function generateTicket(input: {
   phone: string
 }): Promise<GenerateResult> {
   const baseState = await getQueueState()
-  const cpf = normalizeCpf(input.cpf)
-  if (!isValidCpfLength(cpf)) {
-    return { ok: false, error: 'CPF deve conter 11 dígitos.', state: baseState }
+  const cpfErr = rejectionMessageForCpfInput(input.cpf)
+  if (cpfErr) {
+    return { ok: false, error: cpfErr, state: baseState }
   }
+  const cpf = normalizeCpf(input.cpf)
 
   const queueDate = brazilTodayDate()
   const nameTrim = input.name.trim()
@@ -308,7 +310,8 @@ export async function generateTicket(input: {
     const state = await getQueueState()
     return {
       ok: false,
-      error: 'Não foi possível emitir a senha. Tente novamente.',
+      error:
+        'Não conseguimos enviar sua senha agora. Espere alguns instantes e tente de novo. Se repetir, fale na recepção.',
       state,
     }
   }
@@ -319,7 +322,7 @@ export async function generateTicket(input: {
     return {
       ok: false,
       error:
-        'Informe nome completo e celular (DDD + número) com 10 ou 11 dígitos.',
+        'Para primeira vez neste sistema, informe seu nome completo e um celular com DDD (10 números, ou 11 com o 9 antes do número).',
       state,
     }
   }
@@ -396,7 +399,7 @@ export async function callNextTicket(): Promise<
     if (!result) {
       return {
         ok: false,
-        error: 'Não há senhas na fila',
+        error: 'Neste momento não há senhas aguardando para ser chamadas.',
         state,
       }
     }

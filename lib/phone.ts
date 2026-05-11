@@ -19,3 +19,26 @@ export function formatPhoneDisplay(digits: string): string {
   }
   return digits
 }
+
+/**
+ * Orientação opcional sob o campo (não substitui regra backend de 10 ou 11 dígitos).
+ */
+export function describePhoneInputHint(normalizedDigits: string): string | null {
+  if (normalizedDigits.length === 0) return null
+  if (normalizedDigits.length < 10) {
+    const falta = 10 - normalizedDigits.length
+    return falta === 1
+      ? 'Falta 1 número para incluir pelo menos o DDD + telefone.'
+      : `Informe pelo menos 10 dígitos (DDD + telefone): faltam ${falta}.`
+  }
+  if (
+    normalizedDigits.length === 11 &&
+    normalizedDigits[2] !== '9'
+  ) {
+    return 'Celular com 11 dígitos: após o DDD deve vir o 9 (ex.: (11) 98765…).'
+  }
+  if (normalizedDigits.length > 11) {
+    return 'Use apenas os números do celular com DDD (no máximo 11 dígitos).'
+  }
+  return null
+}
