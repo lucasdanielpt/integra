@@ -16,6 +16,17 @@ enum QueueTicketStatus {
   CANCELLED
 }
 
+/** desk_slot = 0 coordenação (master único neste modelo); 1–4 guichês. */
+model StaffAccount {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deskSlot     Int      @unique @map("desk_slot")
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("staff_accounts")
+}
+
 model Patient {
   id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   cpfNormalized    String         @unique @map("cpf_normalized") @db.Char(11)
@@ -35,6 +46,8 @@ model QueueSession {
   patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Restrict)
   status       QueueTicketStatus @default(WAITING)
   calledAt     DateTime?         @map("called_at")
+  /** 1–4 quando a senha foi chamada pelo guichê correspondente */
+  calledGuiche Int?              @map("called_guiche")
   queueDate    DateTime          @map("queue_date") @db.Date
   createdAt    DateTime          @default(now()) @map("created_at")
 
