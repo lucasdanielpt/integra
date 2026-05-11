@@ -4,13 +4,12 @@ import {
   generateTicket,
   callNextTicket,
   resetQueue,
-  getTicketById,
-} from '@/lib/queue-store'
+} from '@/lib/queue-service'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const state = getQueueState()
+  const state = await getQueueState()
   return NextResponse.json(state)
 }
 
@@ -18,24 +17,44 @@ export async function POST(request: Request) {
   const { action, name, cpf } = await request.json()
 
   switch (action) {
-    case 'generate':
-      const ticket = generateTicket({ name, cpf })
-      return NextResponse.json({ ticket, ...getQueueState() })
-
-    case 'call':
-      const called = callNextTicket()
-      if (called === null) {
+    case 'generate': {
+      const result = await generateTicket({
+        name: typeof name === 'string' ? name : '',
+        cpf: typeof cpf === 'string' ? cpf : '',
+      })
+      if (!result.ok) {
         return NextResponse.json(
-          { error: 'Não há senhas na fila', ...getQueueState() },
+          { error: result.error, ...result.state },
           { status: 400 }
         )
       }
-      const ticket_info = getTicketById(called)
-      return NextResponse.json({ called, ticket_info, ...getQueueState() })
+      return NextResponse.json({
+        ticket: result.ticket,
+        alreadyInQueue: result.alreadyInQueue,
+        peopleAhead: result.peopleAhead,
+        ...result.state,
+      })
+    }
 
-    case 'reset':
-      resetQueue()
-      return NextResponse.json({ message: 'Fila zerada', ...getQueueState() })
+    case 'call': {
+      const result = await callNextTicket()
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error, ...result.state },
+          { status: 400 }
+        )
+      }
+      return NextResponse.json({
+        called: result.called,
+        ticket_info: result.ticket_info,
+        ...result.state,
+      })
+    }
+
+    case 'reset': {
+      const state = await resetQueue()
+      return NextResponse.json({ message: 'Fila zerada', ...state })
+    }
 
     default:
       return NextResponse.json({ error: 'Ação inválida' }, { status: 400 })
