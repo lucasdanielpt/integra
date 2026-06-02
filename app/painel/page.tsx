@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Spinner } from '@/components/ui/spinner'
+import { Lock, LogOut } from 'lucide-react'
+import { playQueueChime } from '@/lib/queue-chime'
 
 type TicketBrief = {
   id: number
@@ -10,6 +17,7 @@ type TicketBrief = {
 }
 
 interface QueueState {
+  access?: 'public' | 'full'
   currentTicket: number
   lastTicket: number
   currentTicketInfo?: TicketBrief | null
@@ -17,6 +25,11 @@ interface QueueState {
 }
 
 export default function PainelPage() {
+  const [authed, setAuthed] = useState<boolean | null>(null)
+  const [pin, setPin] = useState('')
+  const [gateError, setGateError] = useState<string | null>(null)
+  const [gateBusy, setGateBusy] = useState(false)
+
   const [queue, setQueue] = useState<QueueState>({
     currentTicket: 0,
     lastTicket: 0,
@@ -27,11 +40,17 @@ export default function PainelPage() {
   const fetchQueue = useCallback(async () => {
     try {
       const response = await fetch('/api/queue', { cache: 'no-store' })
+      if (!response.ok) return
       const data = (await response.json()) as QueueState
+
+      if (data.access !== 'full') {
+        setAuthed(false)
+        return
+      }
 
       if (data.currentTicket !== previousTicket.current && data.currentTicket > 0) {
         setIsBlinking(true)
-        playSound()
+        playQueueChime()
         setTimeout(() => setIsBlinking(false), 3000)
       }
 
@@ -42,53 +61,137 @@ export default function PainelPage() {
     }
   }, [])
 
-  const playSound = () => {
+  const checkSession = useCallback(async () => {
     try {
-      const AudioContextCtor =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      const audioContext = new AudioContextCtor()
-
-      const playBeep = (frequency: number, startTime: number) => {
-        const oscillator = audioContext.createOscillator()
-        const gainNode = audioContext.createGain()
-
-        oscillator.connect(gainNode)
-        gainNode.connect(audioContext.destination)
-
-        oscillator.frequency.value = frequency
-        oscillator.type = 'sine'
-
-        gainNode.gain.setValueAtTime(0.3, startTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3)
-
-        oscillator.start(startTime)
-        oscillator.stop(startTime + 0.3)
+      const r = await fetch('/api/painel/session', { cache: 'no-store' })
+      const d = (await r.json()) as { authenticated?: boolean }
+      if (d.authenticated) {
+        setAuthed(true)
+        await fetchQueue()
+      } else {
+        setAuthed(false)
       }
-
-      playBeep(800, audioContext.currentTime)
-      playBeep(1000, audioContext.currentTime + 0.35)
-      playBeep(1200, audioContext.currentTime + 0.7)
     } catch {
-      console.log('Audio não suportado')
+      setAuthed(false)
+    }
+  }, [fetchQueue])
+
+  useEffect(() => {
+    void checkSession()
+  }, [checkSession])
+
+  useEffect(() => {
+    if (authed !== true) return
+    const interval = setInterval(() => void fetchQueue(), 2000)
+    return () => clearInterval(interval)
+  }, [authed, fetchQueue])
+
+  const unlock = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGateBusy(true)
+    setGateError(null)
+    try {
+      const response = await fetch('/api/painel/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pin }),
+      })
+      const body = (await response.json()) as { success?: boolean; error?: string }
+      if (!response.ok) {
+        setGateError(body.error ?? 'Não foi possível entrar.')
+        return
+      }
+      setPin('')
+      setAuthed(true)
+      await fetchQueue()
+    } catch {
+      setGateError('Erro de conexão.')
+    } finally {
+      setGateBusy(false)
     }
   }
 
-  useEffect(() => {
-    fetchQueue()
-    const interval = setInterval(fetchQueue, 2000)
-    return () => clearInterval(interval)
-  }, [fetchQueue])
+  const logout = async () => {
+    await fetch('/api/painel/session', { method: 'DELETE' })
+    setAuthed(false)
+    previousTicket.current = 0
+    setQueue({ currentTicket: 0, lastTicket: 0 })
+  }
 
   const current = queue.currentTicketInfo
   const upcomingSlots = queue.nextWaitingTickets ?? []
-
   const currentGuicheLabel =
     typeof current?.calledGuiche === 'number' ? current.calledGuiche : null
 
+  if (authed === null) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background">
+        <Spinner className="h-10 w-10 text-primary" />
+      </main>
+    )
+  }
+
+  if (authed === false) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background p-6">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2 text-xl">
+              <Lock className="h-5 w-5" />
+              Painel da recepção
+            </CardTitle>
+            <CardDescription>
+              Digite a senha configurada na Vercel (<code className="text-xs">PAINEL_DISPLAY_PASSWORD</code>
+              ) para exibir nomes e a fila completa nesta TV.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={unlock} className="flex flex-col gap-4">
+              <Field>
+                <FieldLabel htmlFor="painel-pin">Senha do painel</FieldLabel>
+                <Input
+                  id="painel-pin"
+                  type="password"
+                  autoComplete="off"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="Senha definida no ambiente"
+                  autoFocus
+                />
+              </Field>
+              {gateError ? (
+                <p className="text-sm text-destructive text-center">{gateError}</p>
+              ) : null}
+              <Button type="submit" disabled={gateBusy || !pin.trim()} className="w-full">
+                {gateBusy ? (
+                  <>
+                    <Spinner className="mr-2 h-4 w-4" />
+                    Abrindo...
+                  </>
+                ) : (
+                  'Entrar'
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen flex flex-col bg-background">
-      <header className="flex items-center justify-center gap-6 py-8 border-b border-border">
+      <header className="flex items-center justify-center gap-6 py-8 border-b border-border relative">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="absolute right-4 top-4"
+          onClick={() => void logout()}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sair
+        </Button>
         <Image
           src="/logo-integra.png"
           alt="Clínica Íntegra"

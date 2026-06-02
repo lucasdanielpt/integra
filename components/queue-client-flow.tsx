@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { playQueueChime } from "@/lib/queue-chime";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -329,6 +330,18 @@ export function QueueClientFlow({ variant }: Props) {
     }, MOBILE_QUEUE_POLL_MS);
     return () => window.clearInterval(id);
   }, [isTotem, screen, cpf, refreshQueuePosition]);
+
+  const playedCalledChime = useRef(false);
+  useEffect(() => {
+    if (screen !== "called") {
+      playedCalledChime.current = false;
+      return;
+    }
+    if (!playedCalledChime.current) {
+      playedCalledChime.current = true;
+      playQueueChime();
+    }
+  }, [screen]);
 
   function ticketPadOrDash(n: number): string {
     return n > 0 ? String(n).padStart(3, "0") : "—";

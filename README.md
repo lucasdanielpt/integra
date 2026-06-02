@@ -24,3 +24,7 @@ O aviso **Ignored build scripts** do pnpm some se o `package.json` listar `pnpm.
 Checklist manual (tablet fullscreen, QR em HTTPS estável): [docs/smoke-test-fila-mvp.md](docs/smoke-test-fila-mvp.md). Opcional contra produção já publicada:
 
 `SMOKE_BASE_URL=https://seu-app.vercel.app pnpm run smoke:urls`.
+
+### Painel (TV) com senha
+
+Defina **`PAINEL_DISPLAY_PASSWORD`** na Vercel (passo a passo: [docs/painel-senha-vercel.md](docs/painel-senha-vercel.md)). Depois abra `/painel` e informe essa senha na TV.

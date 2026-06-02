@@ -7,12 +7,18 @@ import {
   checkCpfQueueStatus,
 } from '@/lib/queue-service'
 import { readAdminLogin } from '@/lib/server-admin-auth'
+import { canReadFullQueueForPainel } from '@/lib/painel-gate'
+import { toPublicQueueSnapshot } from '@/lib/queue-public-snapshot'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const state = await getQueueState()
-  return NextResponse.json(state)
+  const full = await canReadFullQueueForPainel()
+  if (!full) {
+    return NextResponse.json(toPublicQueueSnapshot(state))
+  }
+  return NextResponse.json({ ...state, access: 'full' as const })
 }
 
 export async function POST(request: Request) {
