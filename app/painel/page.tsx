@@ -13,7 +13,6 @@ interface QueueState {
   currentTicket: number
   lastTicket: number
   currentTicketInfo?: TicketBrief | null
-  /** Até 3 próximos WAITING (senha + nome) */
   nextWaitingTickets?: TicketBrief[]
 }
 
@@ -27,7 +26,7 @@ export default function PainelPage() {
 
   const fetchQueue = useCallback(async () => {
     try {
-      const response = await fetch('/api/queue')
+      const response = await fetch('/api/queue', { cache: 'no-store' })
       const data = (await response.json()) as QueueState
 
       if (data.currentTicket !== previousTicket.current && data.currentTicket > 0) {
@@ -82,7 +81,6 @@ export default function PainelPage() {
   }, [fetchQueue])
 
   const current = queue.currentTicketInfo
-  /** Sempre exibimos três vagas visuais; faltantes mostram "---". */
   const upcomingSlots = queue.nextWaitingTickets ?? []
 
   const currentGuicheLabel =

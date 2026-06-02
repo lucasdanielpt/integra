@@ -38,6 +38,7 @@ function digitsOnly(s: string): string {
 type Screen =
   | "enter_cpf"
   | "in_queue"
+  | "called"
   | "take_ticket"
   | "issued_new";
 
@@ -50,6 +51,7 @@ export function QueueClientFlow({ variant }: Props) {
   const [ticket, setTicket] = useState<number | null>(null);
   const [alreadyInQueue, setAlreadyInQueue] = useState(false);
   const [peopleAhead, setPeopleAhead] = useState<number | null>(null);
+  const [calledGuiche, setCalledGuiche] = useState<number | null>(null);
   const [needsRegistration, setNeedsRegistration] = useState(false);
   const [knownPatientName, setKnownPatientName] = useState<string | null>(null);
   const [knownPatientPhone, setKnownPatientPhone] = useState<string | null>(
@@ -118,6 +120,7 @@ export function QueueClientFlow({ variant }: Props) {
     setTicket(null);
     setAlreadyInQueue(false);
     setPeopleAhead(null);
+    setCalledGuiche(null);
     setNeedsRegistration(false);
     setKnownPatientName(null);
     setKnownPatientPhone(null);
@@ -156,6 +159,30 @@ export function QueueClientFlow({ variant }: Props) {
     []
   );
 
+  const applyCalledDisplay = useCallback(
+    (data: {
+      ticket?: number;
+      calledGuiche?: number | null;
+      patientName?: string;
+      patientPhone?: string | null;
+    }) => {
+      if (typeof data.ticket === "number") setTicket(data.ticket);
+      setCalledGuiche(
+        typeof data.calledGuiche === "number" ? data.calledGuiche : null
+      );
+      setAlreadyInQueue(true);
+      setPeopleAhead(null);
+      setKnownPatientName(
+        typeof data.patientName === "string" ? data.patientName : null
+      );
+      setKnownPatientPhone(
+        typeof data.patientPhone === "string" ? data.patientPhone : null
+      );
+      setScreen("called");
+    },
+    []
+  );
+
   const handleCheckCpf = async () => {
     setIsLoading(true);
     setError(null);
@@ -174,7 +201,10 @@ export function QueueClientFlow({ variant }: Props) {
         return;
       }
 
-      if (data.phase === "in_queue") {
+      if (data.phase === "called") {
+        applyCalledDisplay(data);
+        if (isTotem) scheduleTotemReset();
+      } else if (data.phase === "in_queue") {
         setScreen("in_queue");
         setTicket(data.ticket);
         setPeopleAhead(data.peopleAhead);
@@ -220,7 +250,10 @@ export function QueueClientFlow({ variant }: Props) {
         );
         return;
       }
-      if (data.phase === "in_queue") {
+      if (data.phase === "called") {
+        applyCalledDisplay(data);
+      } else if (data.phase === "in_queue") {
+        setScreen("in_queue");
         setTicket(data.ticket);
         setPeopleAhead(data.peopleAhead);
         setAlreadyInQueue(true);
@@ -228,6 +261,8 @@ export function QueueClientFlow({ variant }: Props) {
         setKnownPatientPhone(
           typeof data.patientPhone === "string" ? data.patientPhone : null
         );
+      } else if (data.phase === "can_take_ticket") {
+        goAnotherCpf();
       } else {
         setScreen("take_ticket");
         setNeedsRegistration(Boolean(data.needsRegistration));
@@ -243,7 +278,7 @@ export function QueueClientFlow({ variant }: Props) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [cpf]);
+  }, [cpf, applyCalledDisplay, goAnotherCpf]);
 
   const fetchDaySnapshot = useCallback(async () => {
     try {
@@ -285,6 +320,16 @@ export function QueueClientFlow({ variant }: Props) {
     return () => window.clearInterval(id);
   }, [isTotem, screen, ticket, refreshQueuePosition]);
 
+  /** Após chamada: só confere se o atendimento terminou (sem mostrar posição na fila). */
+  useEffect(() => {
+    if (isTotem || screen !== "called" || !cpf) return;
+    void refreshQueuePosition();
+    const id = window.setInterval(() => {
+      void refreshQueuePosition();
+    }, MOBILE_QUEUE_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [isTotem, screen, cpf, refreshQueuePosition]);
+
   function ticketPadOrDash(n: number): string {
     return n > 0 ? String(n).padStart(3, "0") : "—";
   }
@@ -311,6 +356,12 @@ export function QueueClientFlow({ variant }: Props) {
         );
         return;
       }
+      if (data.called) {
+        applyCalledDisplay(data);
+        if (isTotem) scheduleTotemReset();
+        return;
+      }
+
       applyQueueDisplay(data);
 
       if (data.alreadyInQueue) {
@@ -345,7 +396,7 @@ export function QueueClientFlow({ variant }: Props) {
   function positionMessage(): string | null {
     if (ticket === null || peopleAhead === null) return null;
     if (screen === "in_queue" && alreadyInQueue && peopleAhead === 0) {
-      return "É a sua vez. Aguarde ser chamado no painel.";
+      return "Você é o próximo. Aguarde sua senha ser chamada no painel.";
     }
     if (screen === "issued_new" && !alreadyInQueue) {
       if (peopleAhead === 0) return "Você é o próximo da fila.";
@@ -354,7 +405,7 @@ export function QueueClientFlow({ variant }: Props) {
     }
     if (screen === "in_queue" || (screen === "issued_new" && alreadyInQueue)) {
       if (peopleAhead === 0) {
-        return "É a sua vez. Aguarde ser chamado no painel.";
+        return "Você é o próximo. Aguarde sua senha ser chamada no painel.";
       }
       if (peopleAhead === 1) return "1 pessoa à sua frente";
       return `${peopleAhead} pessoas à sua frente`;
@@ -366,7 +417,7 @@ export function QueueClientFlow({ variant }: Props) {
 
   const showBackToCpf =
     screen !== "enter_cpf" &&
-    !(isTotem && (screen === "in_queue" || screen === "issued_new"));
+    !(isTotem && (screen === "in_queue" || screen === "called" || screen === "issued_new"));
 
   return (
     <main
@@ -488,6 +539,79 @@ export function QueueClientFlow({ variant }: Props) {
                 <ArrowLeft className={cn("mr-2", isTotem ? "h-7 w-7" : "h-4 w-4")} />
                 {isTotem ? "Começar de novo" : "Outro CPF"}
               </Button>
+            )}
+
+            {screen === "called" && ticket !== null && (
+              <div className="w-full flex flex-col items-center gap-4 text-center">
+                <p
+                  className={cn(
+                    "font-semibold text-primary",
+                    isTotem ? "text-3xl md:text-4xl" : "text-xl"
+                  )}
+                >
+                  É a sua vez!
+                </p>
+                {knownPatientName && (
+                  <div
+                    className={cn(
+                      "text-foreground space-y-1",
+                      isTotem ? "text-xl md:text-2xl" : "text-base"
+                    )}
+                  >
+                    <p className="font-medium">{knownPatientName}</p>
+                    {knownPatientPhone ? (
+                      <p className="text-muted-foreground">
+                        Celular: {knownPatientPhone}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    "font-bold text-primary tracking-tight",
+                    isTotem
+                      ? "text-[clamp(5rem,18vw,9rem)] leading-none py-4"
+                      : isMobile
+                        ? "text-8xl leading-none py-2"
+                        : "text-7xl"
+                  )}
+                >
+                  {String(ticket).padStart(3, "0")}
+                </div>
+                {typeof calledGuiche === "number" ? (
+                  <p
+                    className={cn(
+                      "font-semibold text-foreground",
+                      isTotem ? "text-2xl md:text-3xl" : "text-lg"
+                    )}
+                  >
+                    Dirigir-se ao Guichê {calledGuiche}
+                  </p>
+                ) : (
+                  <p
+                    className={cn(
+                      "text-muted-foreground",
+                      isTotem ? "text-xl md:text-2xl" : "text-base"
+                    )}
+                  >
+                    Aguarde a indicação do guichê no painel da clínica.
+                  </p>
+                )}
+                <p
+                  className={cn(
+                    "text-muted-foreground max-w-md",
+                    isTotem ? "text-lg md:text-xl" : "text-sm"
+                  )}
+                >
+                  Você não está mais na fila de espera neste aparelho. Vá ao
+                  atendimento indicado.
+                </p>
+                {isTotem && isCooldownActive && (
+                  <p className="text-xl text-muted-foreground">
+                    Voltando ao início em {cooldownRemaining}s…
+                  </p>
+                )}
+              </div>
             )}
 
             {(screen === "in_queue" || screen === "issued_new") &&

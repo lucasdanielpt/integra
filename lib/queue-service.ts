@@ -172,6 +172,15 @@ export type CheckCpfResult =
   | { ok: false; error: string; state: QueueStateJson }
   | {
       ok: true
+      phase: 'called'
+      ticket: number
+      calledGuiche: number | null
+      patientName: string
+      patientPhone: string | null
+      state: QueueStateJson
+    }
+  | {
+      ok: true
       phase: 'in_queue'
       ticket: number
       peopleAhead: number
@@ -223,6 +232,17 @@ export async function checkCpfQueueStatus(cpfRaw: string): Promise<CheckCpfResul
   })
 
   if (active) {
+    if (active.status === QueueTicketStatus.CALLED) {
+      return {
+        ok: true,
+        phase: 'called',
+        ticket: active.ticketNumber,
+        calledGuiche: active.calledGuiche ?? null,
+        patientName: patient.fullName,
+        patientPhone: patientPhoneDisplay(patient),
+        state,
+      }
+    }
     return {
       ok: true,
       phase: 'in_queue',
@@ -254,6 +274,9 @@ export type GenerateResult =
       ticket: number
       alreadyInQueue: boolean
       peopleAhead: number
+      /** Senha já foi chamada no guichê — cliente deve ver tela "sua vez", sem posição na fila */
+      called?: boolean
+      calledGuiche?: number | null
       state: QueueStateJson
     }
   | { ok: false; error: string; state: QueueStateJson }
@@ -379,6 +402,17 @@ export async function generateTicket(input: {
   }
 
   if (inner.kind === 'existing') {
+    if (inner.active.status === QueueTicketStatus.CALLED) {
+      return {
+        ok: true,
+        ticket: inner.active.ticketNumber,
+        alreadyInQueue: true,
+        called: true,
+        calledGuiche: inner.active.calledGuiche ?? null,
+        peopleAhead: 0,
+        state,
+      }
+    }
     return {
       ok: true,
       ticket: inner.active.ticketNumber,

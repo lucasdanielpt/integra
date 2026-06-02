@@ -68,6 +68,9 @@ export async function POST(request: Request) {
           ticket: result.ticket,
           alreadyInQueue: result.alreadyInQueue,
           peopleAhead: result.peopleAhead,
+          ...(result.called
+            ? { called: true, calledGuiche: result.calledGuiche ?? null }
+            : {}),
           ...result.state,
         })
       }
